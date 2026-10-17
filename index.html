@@ -204,7 +204,7 @@ h1 .w1{color:#FF7A45}h1 .w2{color:#FFD23F}h1 .w3{color:#7FE0FF}h1 .w4{color:#fff
   </div>
   <div class="cabtit"><b id="cabTit">Foto 1 de 3</b><span id="cabSub">¡Prepárate!</span></div>
   <div class="camwrap">
-    <div id="cam" class="cam mirror">
+    <div id="cam" class="cam">
       <video id="vid" playsinline muted autoplay></video>
       <div id="cd" class="cd"><b id="cdN">3</b><span id="cdT">¡En sus marcas!</span></div>
       <div id="flash" class="flash"></div>
@@ -212,7 +212,7 @@ h1 .w1{color:#FF7A45}h1 .w2{color:#FFD23F}h1 .w3{color:#7FE0FF}h1 .w4{color:#fff
     </div>
   </div>
   <div id="thumbs" class="thumbs"></div>
-  <p class="foot hint"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>Miren a la camarita de arriba</p>
+  <p class="foot hint" id="hintTxt">¡Miren hacia el celular y sonrían!</p>
 </section>
 
 <!-- ============ RESULTADO ============ -->
@@ -246,7 +246,7 @@ h1 .w1{color:#FF7A45}h1 .w2{color:#FFD23F}h1 .w3{color:#7FE0FF}h1 .w4{color:#fff
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
-  const S = { n: 3, theme: "pista", filter: "color", facing: "user", stream: null, photos: [], cancel: false, busy: false, strip: null };
+  const S = { n: 3, theme: "pista", filter: "color", facing: "environment", stream: null, photos: [], cancel: false, busy: false, strip: null };
 
   /* ---------------- utilidades de dibujo ---------------- */
   const DISPLAY = '"Luckiest Guy","Arial Rounded MT Bold","Trebuchet MS",sans-serif';
@@ -487,6 +487,9 @@ h1 .w1{color:#FF7A45}h1 .w2{color:#FFD23F}h1 .w3{color:#7FE0FF}h1 .w4{color:#fff
 
   /* ---------------- cámara ---------------- */
   const vid = $("vid"), cam = $("cam");
+  /* la cámara queda encendida mientras la página esté abierta, así Safari no vuelve a pedir permiso en cada ronda */
+  const camLive = () => !!S.stream && S.stream.getVideoTracks().some(t => t.readyState === "live");
+  function setHint(){ $("hintTxt").textContent = S.facing === "user" ? "Miren a la camarita de arriba" : "¡Miren hacia el celular y sonrían!"; }
   function stopCam(){ if (S.stream){ S.stream.getTracks().forEach(t => t.stop()); S.stream = null; } vid.srcObject = null; }
   async function startCam(){
     stopCam(); $("camErr").hidden = true;
@@ -540,7 +543,11 @@ h1 .w1{color:#FF7A45}h1 .w2{color:#FFD23F}h1 .w3{color:#7FE0FF}h1 .w4{color:#fff
     if (S.busy) return; S.busy = true; S.cancel = false; S.photos = [];
     show("cabina"); cam.className = "cam" + (S.facing === "user" ? " mirror" : "") + (S.filter !== "color" ? " f-" + S.filter : "");
     $("cabTit").textContent = `Foto 1 de ${S.n}`; $("cabSub").textContent = "¡Prepárate!"; paintProgress(0);
-    try { await startCam(); } catch (e) { camError(e); S.busy = false; return; }
+    setHint();
+    try {
+      if (camLive()){ vid.srcObject = S.stream; await vid.play().catch(() => {}); cam.classList.toggle("mirror", S.facing === "user"); }
+      else await startCam();
+    } catch (e) { camError(e); S.busy = false; return; }
     const poses = ["¡Una sonrisa gigante!", "¡Cara de corredor veloz!", "¡Brazos arriba de campeón!", "¡Todos juntos, abrazo!"];
     await sleep(900);
     for (let i = 0; i < S.n; i++){
@@ -554,14 +561,14 @@ h1 .w1{color:#FF7A45}h1 .w2{color:#FFD23F}h1 .w3{color:#7FE0FF}h1 .w4{color:#fff
       paintProgress(i + 1);
       await sleep(i < S.n - 1 ? 1300 : 700);
     }
-    stopCam(); S.busy = false;
+    S.busy = false;
     if (S.cancel) return;
     await loadFonts();
     S.strip = renderStrip(S.photos, S.n, S.theme, 2);
     $("resImg").src = S.strip.toDataURL("image/jpeg", .92);
     markTheme(); show("final"); fanfare();
   }
-  function cancelBooth(){ S.cancel = true; stopCam(); S.busy = false; $("cd").classList.remove("show"); show("inicio"); }
+  function cancelBooth(){ S.cancel = true; S.busy = false; $("cd").classList.remove("show"); show("inicio"); }
 
   /* ---------------- guardar ---------------- */
   function toast(m){ const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2600); }
@@ -587,6 +594,7 @@ h1 .w1{color:#FF7A45}h1 .w2{color:#FFD23F}h1 .w3{color:#7FE0FF}h1 .w4{color:#fff
   $("salir").addEventListener("click", cancelBooth);
   $("voltear").addEventListener("click", async () => {
     S.facing = S.facing === "user" ? "environment" : "user";
+    setHint();
     if (S.stream){ try { await startCam(); } catch (e) { camError(e); } }
   });
   $("guardar").addEventListener("click", save);
@@ -604,7 +612,7 @@ h1 .w1{color:#FF7A45}h1 .w2{color:#FFD23F}h1 .w3{color:#7FE0FF}h1 .w4{color:#fff
     img.src = S.strip.toDataURL("image/jpeg", .92);
     updatePreview(); beep(780, .08, "triangle", .15);
   });
-  document.addEventListener("visibilitychange", () => { if (document.hidden && S.busy) cancelBooth(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden){ if (S.busy) cancelBooth(); stopCam(); } });
   document.addEventListener("touchmove", e => { if (e.touches.length > 1 || !e.target.closest(".res")) e.preventDefault(); }, { passive: false });
 
   document.querySelectorAll(".sw").forEach(el => {
